@@ -136,6 +136,8 @@ dl { margin: 8px 0; }
   <button class="nav-link" id="tab-dec" role="tab" aria-controls="p-dec" aria-selected="false" type="button">反编译证据</button>
   <button class="nav-link" id="tab-more" role="tab" aria-controls="p-more" aria-selected="false" type="button">其他隐私面</button>
   <button class="nav-link" id="tab-ban" role="tab" aria-controls="p-ban" aria-selected="false" type="button">封号维度</button>
+  <button class="nav-link" id="tab-audit" role="tab" aria-controls="p-audit" aria-selected="false" type="button">证据审计</button>
+  <button class="nav-link" id="tab-life" role="tab" aria-controls="p-life" aria-selected="false" type="button">信号总矩阵</button>
   <button class="nav-link" id="tab-end" role="tab" aria-controls="p-end" aria-selected="false" type="button">端点清单</button>
   <button class="nav-link" id="tab-met" role="tab" aria-controls="p-met" aria-selected="false" type="button">方法与结论</button>
 </div>
@@ -158,7 +160,10 @@ dl { margin: 8px 0; }
     <li><b>SIM 卡国家码等运营商信息由 Datadog SDK 采集上报</b> <span class="evi evi-seen">【实锤】</span>——<code>carrierISOCountryCode / mobileCountryCode / radioAccessTechnology / carrierAllowsVOIP</code> 字符串紧邻 Datadog SDK 代码区，随 RUM 会话上报 <code>us5.datadoghq.com</code>。这意味着即使走 VPN，SIM 归属地仍会出现在遥测里。</li>
     <li><b>位置采集克制</b> <span class="evi evi-seen">【实锤】</span>——仅申请「使用期间」定位；CLLocationManager/CLGeocoder 是助手的位置工具（用户主动触发）；无常驻后台定位。另有按国家触发的 Yoti 年龄验证流程。</li>
     <li>封禁判定不在 App 内：<b>App 是信号采集端，判定在服务端</b>——同一台设备上换账号，会经 DeviceCheck（硬件级、服务端可写 2 bit 标记）、App Attest 密钥、Keychain 残留标识、Sift 设备图谱在服务端重新关联 <span class="evi evi-inf">【推断】</span>。</li>
+    <li><b>采集并非完全无条件</b>：App 内置完整同意管理层（<code>ConsentApi</code> 三类请求、<code>ThirdPartyAnalyticsConsent</code>/<code>MonitoringConsent</code>、隐私设置界面）与条件性停采标记（<code>com.anthropic.claude.is-unrecorded-request</code>）——默认值与开关实效需运行时验证 <span class="evi evi-seen">【机制实锤】</span> <span class="evi evi-inf">【有效性推断】</span>。</li>
+    <li><b>传输受证书固定保护</b>（SPKI SHA-256），因此本报告结论来自静态分析而非抓包 <span class="evi evi-seen">【实锤】</span>；<b>无广告归因 SDK</b>（无 AppsFlyer/Adjust/Branch 等）<span class="evi evi-none">【实锤·未发现】</span>。</li>
   </ol>
+  <p class="text-small">注：本报告第 9 章「证据审计」对早期版本中若干过强表述做了降级与勘误（含 <code>X-Client-Geo-Region</code> 兜底作用域、SIM 字段通道归属、App Attest 绑定强度），并显式列出方法论局限，建议与结论对照阅读。</p>
 </div>
 
 <div id="p-flow" role="tabpanel" aria-labelledby="tab-flow" hidden>
@@ -174,7 +179,7 @@ dl { margin: 8px 0; }
     <tbody>
       <tr><td><b>Anthropic 后端</b></td><td class="mono">https://claude.ai/api</td><td>自定义请求头组（见六维-设备指纹）、<code>Anthropic-Device-ID</code>、会话 Cookie <code>__Host-ant_trusted_device</code>、App Attest 挑战应答、TCP 源 IP（服务端侧）</td><td><span class="evi evi-seen">实锤</span></td></tr>
       <tr><td><b>Sift Science</b><br>（商业反欺诈）</td><td class="mono">api3.siftscience.com<br>/v3/accounts/%@/mobile_events</td><td><code>SiftIosDevicePropertiesCollector</code> 设备属性、<code>SiftKeychain</code> 钥匙串持久标识、<code>com.sift.initial_device_ifv</code>（首次 IDFV）、App 状态事件、beaconKey；遥测分类含 <code>siftOnly / fraudMonitoring</code></td><td><span class="evi evi-seen">实锤</span></td></tr>
-      <tr><td><b>Datadog RUM<br>+ 崩溃</b></td><td class="mono">us5.datadoghq.com<br>/rum/sessions</td><td>设备型号/OS/App 版本、<b>SIM 国家码与运营商</b>（carrierISOCountryCode 等）、网络连接类型（RUMConnectivity）、URLSession 一方主机追踪（URLSessionInstrumentationFirstPartyHostsTracing）、NTP 校时（DatadogNTPDateProvider）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>Datadog RUM<br>+ 崩溃</b></td><td class="mono">us5.datadoghq.com<br>/rum/sessions</td><td>设备型号/OS/App 版本、运营商结构与接入技术字段（<code>carrierISOCountryCode</code>/<code>radioAccessTechnology</code>，采集能力确证、实际取值见审计修正 2）、网络连接类型（RUMConnectivity）、URLSession 一方主机追踪（URLSessionInstrumentationFirstPartyHostsTracing）、NTP 校时（DatadogNTPDateProvider）</td><td><span class="evi evi-seen">结构实锤</span> <span class="evi evi-inf">取值推断</span></td></tr>
       <tr><td><b>Sentry ×2</b></td><td class="mono">o1158394.ingest.us.sentry.io<br>(4507115472551936 / 4510189717356544)</td><td>崩溃与性能事件，含 <code>is_emulator</code>、<code>SentryLocale</code> 语言环境等设备上下文</td><td><span class="evi evi-seen">实锤</span></td></tr>
       <tr><td><b>Firebase / Google</b></td><td class="mono">play.googleapis.com/log<br>firebaseinstallations</td><td>Firebase 安装 ID（FID）、FCM 推送 token、GoogleDataTransport 时钟数据（<code>GDTCORClockTimezoneOffsetSeconds</code> <b>时区偏移</b>）、Maps/Places SDK 位置与网络数据</td><td><span class="evi evi-seen">实锤</span></td></tr>
       <tr><td><b>LiveKit WebRTC</b><br>（语音模式）</td><td class="mono">WebRTC 媒体通道<br>ICE/STUN/TURN</td><td>网络接口枚举（含 <code>utun</code> 识别）、ICE 候选地址；若 VPN 不覆盖 UDP/IPv6，媒体服务器可看到真实出口地址</td><td><span class="evi evi-seen">实锤</span> <span class="evi evi-inf">推断</span></td></tr>
@@ -222,7 +227,7 @@ dl { margin: 8px 0; }
       <tr><td>Sift Keychain 标识 + 首次 IDFV</td><td><code>com.sift.initial_device_ifv</code>；应用重装不清 Keychain 即保留</td><td>系统钥匙串</td><td><span class="evi evi-seen">实锤</span></td></tr>
       <tr><td>SIM 国家码 / 运营商 / 接入技术</td><td>Datadog RUM（CTTelephonyNetworkInfo）</td><td>随会话</td><td><span class="evi evi-seen">实锤</span></td></tr>
       <tr><td>平台/OS/版本/构建头组</td><td><code>Anthropic-Client-Platform / OS-Version / Version / Build / App</code></td><td>随请求</td><td><span class="evi evi-seen">实锤</span></td></tr>
-      <tr><td>区域头 <code>X-Client-Geo-Region</code></td><td>网络上下文缓存的区域值（服务端 bootstrap 下发），<b>缺省兜底硬编码 "US"</b>（反编译确认）；每请求另有随机 <code>X-Client-Request-Id</code> 与授权路径 <code>X-Authorization</code></td><td>随请求</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>区域头 <code>X-Client-Geo-Region</code></td><td>网络上下文缓存的区域值（服务端 bootstrap 下发），存在硬编码 <code>"US"</code> 兜底字面量（反编译确认写入 <code>dict["X-Client-Geo-Region"]</code>，但触发条件受 flag 控制，见证据审计修正 1）；每请求另有随机 <code>X-Client-Request-Id</code> 与授权路径 <code>X-Authorization</code></td><td>随请求</td><td><span class="evi evi-seen">实锤存在</span> <span class="evi evi-inf">兜底必然生效为推断</span></td></tr>
       <tr><td>Firebase FID / FCM token</td><td>Firebase Installations</td><td>系统钥匙串</td><td><span class="evi evi-seen">实锤</span></td></tr>
       <tr><td>Sentry 安装 ID / is_emulator</td><td>Sentry 崩溃与性能上下文</td><td>系统钥匙串</td><td><span class="evi evi-seen">实锤</span></td></tr>
       <tr><td>Datadog anonymous ID</td><td>AnonymousIdentifierManager</td><td>本地</td><td><span class="evi evi-seen">实锤</span></td></tr>
@@ -445,6 +450,259 @@ if (ctx-&gt;flag48) {
     <li>同为"被封"的账号，具体原因可能各不相同（付款方式、手机号、设备历史、使用模式），不做归因断言</li>
     <li>更正记录：早期版本提及的 <code>policyCountryCode</code> 经邻域复核属 Google Maps proto 字段；<code>StFraudAbuseInfo/YetiAbuse</code> 属 Google proto 类型群——均非 Anthropic 风控组件，已从结论中剔除</li>
   </ul>
+
+  <h3>附：Sift SDK 完整采集字段表（<code>sift-devprops</code> payload）</h3>
+  <p class="text-small">从二进制字符串区直接还原的 payload 键名。这是 <b>Sift 一侧</b>的采集面，与 Datadog 的采集面并行且独立。<code>mobile_iso_country_code</code> 在全二进制中<b>仅此一处</b>，即 Sift 是最主要的 SIM 归属地上报点；Datadog 侧另有 <code>carrierISOCountryCode</code> 结构字段（见证据审计修正 2）。</p>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>字段</th><th>含义</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">mobile_iso_country_code</td><td><b>SIM 卡国家码</b>（如 CN）</td><td>独立于 IP 的硬归属地</td></tr>
+      <tr><td class="mono">mobile_country_code</td><td>移动国家码 MCC（中国 460）</td><td>同上</td></tr>
+      <tr><td class="mono">mobile_network_code</td><td>移动网络码 MNC（运营商细分）</td><td>可精确到中国移动/联通/电信</td></tr>
+      <tr><td class="mono">mobile_carrier_name</td><td>运营商名称</td><td>同上</td></tr>
+      <tr><td class="mono">device_ifv / initial_device_ifv</td><td>当前 / 首次记录的 IDFV</td><td><b>首次值意味着装过即留存</b></td></tr>
+      <tr><td class="mono">device_name / device_system_name / device_system_version</td><td>设备名、系统名与版本</td><td>设备名常含用户真实姓名</td></tr>
+      <tr><td class="mono">device_hardware_machine</td><td>硬件机型标识</td><td>指纹要素</td></tr>
+      <tr><td class="mono">app_name / app_version_short</td><td>应用标识与版本</td><td>—</td></tr>
+      <tr><td class="mono">network_addresses</td><td><b>本地网络地址列表</b></td><td>Wi-Fi/蜂窝接口地址（配合反编译章节②的枚举器）</td></tr>
+      <tr><td class="mono">battery_state / proximity_state</td><td>电池状态、贴近感应状态</td><td>设备使用姿态指纹</td></tr>
+      <tr><td class="mono">window_root_view_controller_titles</td><td><b>当前界面视图控制器标题</b></td><td>即"用户此刻在哪个页面"，行为埋点</td></tr>
+      <tr><td class="mono">user_id / installation_id</td><td>账号 ID 与安装 ID</td><td><b>账号与设备在 Sift 侧直接关联</b></td></tr>
+      <tr><td class="mono">evidence_*（4 组）</td><td>越狱取证结果：文件存在 / 目录可写 / 目录软链 / dyld 注入 / URL scheme 可打开</td><td>见下</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>越狱取证清单（ROT13 编码存储，已解码）</h4>
+  <p class="text-small">Sift 采集器内置 30+ 条越狱痕迹路径，以 ROT13 混淆存放在二进制中（解码命令：<code>tr 'A-Za-z' 'N-ZA-Mn-za-m'</code>）：</p>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>类别</th><th>检测目标（解码后）</th></tr></thead>
+    <tbody>
+      <tr><td>Cydia / 包管理器</td><td class="mono">/Applications/Cydia.app、/private/var/lib/apt、/var/lib/cydia、/var/cache/apt、/var/lib/dpkg</td></tr>
+      <tr><td>越狱注入框架</td><td class="mono">/Library/MobileSubstrate/MobileSubstrate.dylib、DynamicLibraries/{Inject,LiveClock}.plist、/usr/lib/libsubstrate.dylib</td></tr>
+      <tr><td>SSH / 提权工具</td><td class="mono">/usr/sbin/sshd、/bin/bash、/bin/sh、/etc/ssh/sshd_config、/usr/bin/ssh、/usr/libexec/sftp-server</td></tr>
+      <tr><td>越狱应用</td><td class="mono">/Applications/{RockApp,SBSettings,Icy,WinterBoard,MxTube,IntelliScreen,FakeCarrier,blackra1n,blacksn0w,greenpois0n,limera1n,redsn0w}.app</td></tr>
+      <tr><td>系统完整性</td><td class="mono">/etc/apt、目录可写性探测、dyld 注入检测、URL scheme 可打开探测（含 <code>cydia</code>）</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="text-small">取证结果以 <code>evidence_files_present</code> / <code>evidence_directories_writable</code> / <code>evidence_directories_symlinked</code> / <code>evidence_dylds_present</code> / <code>evidence_url_schemes_openable</code> 五组布尔上报——这构成一份完整的越狱画像，随 Sift 事件流发往 <code>api3.siftscience.com</code>。</p>
+
+  <h3>附：另一条此前未列出的身份通道</h3>
+  <p>字符串区发现请求头 <code>Anthropic-ProductAnalytics-Identity</code> 与一方模块 <code>ClaudeProductAnalytics/ProductAnalytics.swift</code>、事件表 <code>product_analytics_events</code>、维度字段 <code>subscriptionLevel / subscriptionPlan</code>——即除 Datadog/Sift/Sentry 外，Anthropic 另有一条<b>自建产品分析管道</b>，事件批量压缩（zlib deflate）后传输，失败策略明确（拒收即丢弃、2xx 但计数不可读则不重发）。该通道的具体端点未在字符串区以明文出现 <span class="evi evi-seen">【机制实锤】</span> <span class="evi evi-none">【端点未发现】</span>。</p>
+
+  <h3>附：为什么"换号"通常无效——五层身份的有效期对照</h3>
+  <p class="text-small">从架构角度看，各层身份的重置成本差异极大。这张表回答的是"系统如何记住一台设备"，不是操作建议。</p>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>层</th><th>载体与位置</th><th>删除 App 后</th><th>抹除设备后</th><th>换 Apple ID 后</th></tr></thead>
+    <tbody>
+      <tr><td>① App Attest 密钥</td><td>Secure Enclave 硬件密钥</td><td>密钥保留在系统，断言仍指向同设备</td><td>重新生成（新身份）</td><td>不受影响</td></tr>
+      <tr><td>② DeviceCheck 位</td><td>苹果服务端，按物理设备</td><td>保留</td><td>保留（Apple ID 变更不影响）</td><td>保留</td></tr>
+      <tr><td>③ Sift 标识</td><td>Keychain + 首次 IDFV</td><td><b>保留</b>（iOS 卸载不清 Keychain）</td><td>清除</td><td>保留</td></tr>
+      <tr><td>④ 可信设备 Cookie</td><td>会话存储（服务端校验）</td><td>清除</td><td>清除</td><td>视登录态</td></tr>
+      <tr><td>⑤ 遥测一致性画像</td><td>Datadog/Sift 服务端，按账号+设备聚合</td><td><b>永久</b>（服务端历史）</td><td>仍与旧账号历史并存</td><td>永久</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="text-small">结论：前四层是"客户端/系统侧"身份，第五层是"服务端历史"。仅重置客户端侧（重装、换号、清数据）无法清除①③，也无法清除⑤——这就是同设备新账号迅速被关联的架构原因。</p>
+
+  <h4>大陆使用场景下实际暴露的信号（仅陈述可见性）</h4>
+  <ul>
+    <li><b>不可通过软件隐藏</b>：SIM 卡国家码（MCC 460）与运营商名称——Sift payload 明确含 <code>mobile_iso_country_code</code>/<code>mobile_country_code</code>/<code>mobile_network_code</code>/<code>mobile_carrier_name</code>，取值为 SIM 硬件读取，与网络路径无关 <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>不可通过软件隐藏</b>：DeviceCheck 位（苹果侧按物理设备存续）<span class="evi evi-seen">【机制实锤】</span></li>
+    <li><b>跟随系统设置</b>：时区偏移（+28800 = UTC+8）、系统语言/区域格式（Sentry <code>SentryLocale</code>）、设备名（<code>device_name</code>，常含中文姓名）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>跟随账号</b>：+86 手机号、支付收据地区、Apple ID 账单区域 <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>跟随网络路径</b>：出口 IP（含 IP 信誉/ASN 类型）——这是唯一与"网络接入方式"相关的一层 <span class="evi evi-inf">【推断】</span></li>
+  </ul>
+  <p class="text-small">换言之：在网络路径之外，有至少四类信号与"你从哪里访问"无关，而与"你的设备与账号是谁的"有关。</p>
+</div>
+
+<div id="p-life" role="tabpanel" aria-labelledby="tab-life" hidden>
+  <h3>信号总矩阵：全部采集项 × 通道 × 持久性 × 可控性</h3>
+  <p class="text-muted">本报告所有发现的单表汇总——按<b>生命周期阶段</b>组织（安装 → 注册 → 登录 → 会话 → 使用中 → 卸载后）。"可控性"列指用户可否通过系统权限或 App 内设置关闭该采集项。</p>
+
+  <h4>安装时（无需任何用户操作）</h4>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>信号</th><th>接收方</th><th>持久性</th><th>可控性</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>Firebase 安装 ID（FID）</td><td>Google/Firebase</td><td>系统钥匙串</td><td>不可关闭（Firebase 必需）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>Sift 首次 IDFV（<code>initial_device_ifv</code>）</td><td>Sift</td><td><b>装过即留存</b></td><td>受 <code>ThirdPartyAnalyticsConsent</code> 名义控制（实效未知）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>Sentry 安装 ID</td><td>Sentry</td><td>系统钥匙串</td><td>同上</td><td><span class="evi evi-seen">实锤</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>注册 / 登录时</h4>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>信号</th><th>接收方</th><th>备注</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>手机号 + 国家码选择</td><td>Anthropic</td><td>+86 归属地直接入库</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>Google OAuth（email+profile）/ Apple ID</td><td>Anthropic</td><td>强身份锚点</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>Yoti 年龄验证（按国家触发）</td><td>Anthropic/Yoti</td><td>身份核验记录</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>LoginAttestation（App Attest 挑战）</b></td><td>Anthropic</td><td>硬件密钥签名的登录断言，把账号钉到设备</td><td><span class="evi evi-seen">契约实锤</span> <span class="evi evi-inf">强制性推断</span></td></tr>
+      <tr><td>Sift <code>user_id</code> + <code>installation_id</code> 配对</td><td>Sift</td><td>账号与设备在风控侧首次绑定</td><td><span class="evi evi-seen">实锤</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>每个 API 请求（claude.ai/api）</h4>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>信号</th><th>备注</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td><code>Anthropic-Device-ID</code></td><td>持久化 UUID，每请求随行（ClaudeNetworkingCommon 模块）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>平台/OS/版本/构建/App 头组</td><td>5 个版本类头</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><code>X-Client-Request-Id</code></td><td>每请求随机 UUID</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><code>X-Client-Geo-Region</code></td><td>服务端下发缓存；"US" 兜底字面量存在，触发条件未还原</td><td><span class="evi evi-seen">头实锤</span> <span class="evi evi-inf">兜底推断</span></td></tr>
+      <tr><td>Cookie <code>__Host-ant_trusted_device</code></td><td>可信设备绑定</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>TCP 源 IP</td><td>服务端直接可见（无需客户端配合）</td><td><span class="evi evi-inf">推断</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>会话期间（持续/周期性）</h4>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>信号</th><th>接收方</th><th>频率</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td><b>SessionReattest 周期性重证明</b></td><td>Anthropic</td><td>周期挑战 + 密钥轮换（<code>anthropic.reattest.v1</code>）</td><td><span class="evi evi-seen">契约实锤</span></td></tr>
+      <tr><td>DeviceCheck token 刷新</td><td>Anthropic</td><td>flag 控制（<code>isDeviceCheckTokenRefreshEnabled</code>）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>SIM 国家码/运营商/接入技术</b></td><td>Sift（payload 字段）+ Datadog（结构字段）</td><td>随设备属性上报</td><td><span class="evi evi-seen">Sift 实锤</span> <span class="evi evi-inf">Datadog 取值推断</span></td></tr>
+      <tr><td>时区偏移</td><td>Datadog（<code>setTimezoneOffsetSeconds:</code>）+ Firebase GDT；且<b>持久化到本地文件</b>（<code>storeTimezoneOffset_</code>/<code>timezoneOffsetFilePath_</code>）</td><td>随会话上下文</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>语言/区域/设备名/机型</td><td>Datadog/Sentry/Sift</td><td>随会话</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>本地网络地址列表</td><td>Sift（<code>network_addresses</code>）</td><td>设备属性</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>当前页面标题、电池/贴近状态</td><td>Sift</td><td>App 状态事件</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>UI 行为（点击/链接）+ 一方请求追踪</td><td>Datadog RUM</td><td>实时</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>越狱取证（ROT13 路径集）</td><td>Sift</td><td>设备属性</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>产品分析事件（自建管道，含订阅等级 <code>subscriptionLevel/Plan</code>）</td><td>Anthropic（<code>Anthropic-ProductAnalytics-Identity</code>）</td><td>批量压缩上传</td><td><span class="evi evi-seen">机制实锤</span></td></tr>
+      <tr><td><b>崩溃画像</b>（设备指纹组合 + 越狱 + 仿真 + 开机时间 + 使用统计 + 安装哈希）</td><td>Sentry + Datadog Crash</td><td>崩溃/性能事件时</td><td><span class="evi evi-seen">实锤</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>用户主动触发</h4>
+  <ul>
+    <li>位置（WhenInUse，对话中请求）、照片/相机、麦克风/语音流、健康数据（HKSampleQuery）、日历/提醒（Full Access）、剪贴板变更监听、银行绑定（Plaid）、邮箱（Gmail/M365 MCP）——权限门控 + 同意层名义控制 <span class="evi evi-seen">【实锤】</span></li>
+    <li>Sentry Session Replay（屏幕回放，隐私级别可配置）——服务端配置决定启用 <span class="evi evi-seen">【集成实锤】</span> <span class="evi evi-inf">【启用状态需运行时确认】</span></li>
+  </ul>
+
+  <h4>卸载后仍存活的</h4>
+  <ul>
+    <li><b>Sift 钥匙串标识 + 首次 IDFV</b>（iOS 卸载不清 Keychain）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>DeviceCheck 2-bit 标记</b>（苹果服务端，按物理设备）<span class="evi evi-seen">【机制实锤】</span></li>
+    <li><b>App Attest 密钥</b>（Secure Enclave 系统级）<span class="evi evi-seen">【机制实锤】</span></li>
+    <li>Firebase/Sentry 钥匙串安装 ID <span class="evi evi-seen">【实锤】</span></li>
+    <li>服务端遥测历史（永久）<span class="evi evi-inf">【推断】</span></li>
+  </ul>
+
+  <h4>读表指南</h4>
+  <p class="text-small">横向看：任何一个采集项单独看都"有解释"（崩溃报告、地图功能、产品改进）；纵向看才是完整画像——四家接收方（Anthropic 自建管道 + Sift + Datadog + Sentry/Firebase）在五个生命周期阶段各自采集、互相独立、字段重叠。<b>没有任何单一开关能关停整个矩阵</b>；同意层（<code>ThirdPartyAnalyticsConsent</code> 等）名义覆盖第三方通道，但风控必需的事件是否豁免、默认值是什么，静态分析无法回答。</p>
+</div>
+
+<div id="p-audit" role="tabpanel" aria-labelledby="tab-audit" hidden>
+  <h3>证据审计：对前期结论的自我复核与修正</h3>
+  <p class="text-muted">本节是对本报告早期版本的严格复核结果。<b>结论按可靠性重新分级</b>，过强的表述已降级，误归因已剔除。静态逆向的固有局限在此显式列出，而不是隐藏在结论里。</p>
+
+  <h4>修正 1（重要）：<code>X-Client-Geo-Region</code> 兜底 "US" 的作用域被收窄</h4>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>项</th><th>早期表述</th><th>复核后</th></tr></thead>
+    <tbody>
+      <tr><td>兜底值</td><td>"缺省兜底硬编码 US，直接进请求头"</td><td><b>"US" 字面量确实存在</b>（Swift 小字符串 <code>0x5355</code>+判别码 <code>0xe2</code>），确认传给 <code>FUN_100abb928</code>（= 写 <code>dict["X-Client-Geo-Region"]</code>）</td></tr>
+      <tr><td>写入目标</td><td>返回的请求头字典</td><td><b>降级</b>：该函数（0x100ababe8）返回的是空数组哨兵（Swift 多返回值间接槽），请求头字典在 <code>local_c0/lVar11</code> 侧由隐藏参数 <code>unaff_x20</code> 传入。<code>FUN_100abb928</code> 作用的是<b>该上下文对象持有的字典</b>——它<b>很可能</b>就是最终请求头来源，但伪代码因上下文寄存器丢失无法 100% 确证是同一对象</td></tr>
+      <tr><td>触发条件</td><td>无条件</td><td>位于 <code>ctx-&gt;flag48</code> 分支内，<b>受条件控制</b>；flag 语义未还原</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="text-small"><b>现结论</b>：<code>X-Client-Geo-Region</code> 头存在、键名与写法确证、"US" 兜底字面量确证；"兜底 US 必然出现在每个请求上"属于<b>推断</b>，不再是实锤。报告中该项已降级标注（原为实锤）。</p>
+  <h5>第二轮复核结案（写入目标已确认）</h5>
+  <p class="text-small">对整个 <code>0x100aba000–0x100ad0000</code> 代码区段做了字符串全量清点，确认该区段就是 <b><code>ClaudeNetworkingCommon</code> 模块</b>（唯一字符串集：8 个 Anthropic 请求头 + <code>AnthropicClientAppIdentifier</code> + <code>__Host-ant_trusted_device</code> + <code>com.anthropic.claude.session.*</code> + <code>ClaudeNetworkingCommon/SessionKeychain.swift</code> 源码路径）。该模块<b>内不存在第二个候选字典</b>——头构建闭包（经尾跳 thunk 0x100abb1f0 被模块内调用）操作的上下文字典就是会话请求头字典。悬案收窄为：<b>"US" 兜底的触发条件（ctx+0x48 标志位语义）未还原</b>；"写入的是请求头字典"升级回实锤。</p>
+
+  <h4>修正 2（重要）：SIM 国家码的通道归属更正为「双通道，但主通道是 Sift」</h4>
+  <ul>
+    <li><b>确认（实锤）</b>：Sift SDK 的 <code>sift-devprops</code> payload 明确含 <code>mobile_iso_country_code</code> / <code>mobile_country_code</code> / <code>mobile_network_code</code> / <code>mobile_carrier_name</code>，且 <code>mobile_iso_country_code</code> 在二进制中<b>仅此一处</b>——这是最主要的 SIM 归属地上报点</li>
+    <li><b>确认（实锤）</b>：Datadog SDK 侧另有 <code>carrierISOCountryCode</code> / <code>carrierAllowsVOIP</code> / <code>radioAccessTechnology</code>（紧邻 DatadogInternal 错误串与站点域名表），且 <code>CTTelephonyNetworkInfo/CTCarrier</code> 类与全套 <code>CTRadioAccessTechnology*</code> 常量已链接、<code>[obj mobileCountryCode]</code> 访问器存在</li>
+    <li><b>降级为推断</b>：Datadog 的 carrier 字段是否<b>实际赋非空值并随每个 RUM 会话发送</b>——采集器与类链接已确证，但"字段被填充"这一步未被逐条追到赋值点。SIM 读数通常返回运营商名（而非 SIM 归属地），故 Datadog 侧的<b>国家码可能为空</b>，而 Sift 侧取值路径不同</li>
+  </ul>
+  <p class="text-small"><b>影响</b>：不留 VPN 也能暴露归属地这一核心判断<b>不变</b>，且证据比之前更强（Sift 侧字段表已完整还原）；但"Datadog 一定上报 SIM 国家码"已改写为"Datadog 具备 carrier 采集能力，Sift 确有逐字段的上报"。</p>
+
+  <h4>修正 3：App Attest 的绑定范围重新分级</h4>
+  <ul>
+    <li><b>实锤</b>：<code>DCAppAttestService</code>/<code>DCDevice</code> 已导入；entitlement 声明 <code>appattest-environment = production</code>；模块归属 <code>ClaudeDeviceCheck/AppAttestEnroller.swift</code>、<code>DeviceCheckTokenReporter.swift</code></li>
+    <li><b>实锤</b>：登录/会话/内购/积分四个场景的<b>事件与 API 契约</b>齐备——<code>LoginAttestationResolved</code>、<code>SessionReattest*</code>、<code>api/auth/session_reattest/device_key[/challenge]</code>、<code>ios_iap_receipt_app_attest[_assertion]</code>、<code>UsageCreditsClaimAttestationResolved</code>、<code>bind_attestation</code>，另有 5 个 feature flag 分级开关</li>
+    <li><b>降级为推断</b>：具体调用序列（<code>generateKey</code>→<code>attestKey</code>→<code>generateAssertion</code>）未在导出函数中逐条命中——调用点在未导出的函数体内。故"App Attest 是硬性强制门槛"属推断；<b>"存在完整机制且事件契约齐备"是实锤</b></li>
+  </ul>
+
+  <h4>修正 4：已剔除的错误归因</h4>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>曾误判为</th><th>实际归属</th><th>判定依据</th></tr></thead>
+    <tbody>
+      <tr><td>Anthropic 风控类 <code>StFraudAbuseInfo</code> / <code>YetiAbuse</code></td><td>Google proto 类型群</td><td>与 <code>StGaiaId</code>/<code>StGoogleObjectId</code>/<code>StZwiebackId</code> 同区</td></tr>
+      <tr><td>Anthropic 地理策略字段 <code>policyCountryCode</code></td><td>Google Maps proto 字段</td><td>紧邻 <code>GPSRequestContext_ProtoFormat</code>/<code>streetViewEpochId</code></td></tr>
+      <tr><td>Anthropic 采集的 <code>geo.region.iso_code</code></td><td>OpenTelemetry 语义约定字段表</td><td>与 <code>geo.country.iso_code</code>/<code>heroku.app.id</code> 等标准 OTel 键同区</td></tr>
+      <tr><td>Claude 自身 VPN 检测</td><td>Google Maps SDK（蜂窝判定 + 本地 IP 枚举）</td><td>反编译两处 getifaddrs 调用者，代码区段与 GMSPaint 同域</td></tr>
+      <tr><td>Anthropic 请求头 <code>X-Client-Time-Format</code></td><td>Google Maps SDK 头（第二轮复核）</td><td>邻域全部为 <code>GMSStreetViewParameters</code>/<code>maps.GMSBase.CacheStorage</code>/<code>gmm.iphone</code>；本报告的 Anthropic 头清单中已移除该键</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h4>新增维度：用户可控性（此前完全遗漏）</h4>
+  <p>复核中发现 App 存在<b>完整的同意管理层</b>，这改变了"采集无条件"的印象：</p>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>机制</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>同意 API 与三类请求（用户同意 / 检查 / 撤销）</td><td class="mono">ConsentApi / UserConsentRequest / CheckConsentRequest / RevokeConsentRequest / HasConsentResponse；<code>/v1/privacy-consents</code>、<code>/v1/privacy-consents/check</code></td></tr>
+      <tr><td>细分同意类型</td><td class="mono">ThirdPartyAnalyticsConsent / MonitoringConsent / HealthConsentConfig / VoiceSessionRecordingConsentState / PendingAudioCaptureShareConsent</td></tr>
+      <tr><td>隐私设置界面</td><td class="mono">ClaudeSettings/PrivacySettings.swift、PrivacySettingsModel、SetLocationPrivacySettingRequest</td></tr>
+      <tr><td><b>条件性停采标记（WebView 域）</b></td><td class="mono">com.anthropic.claude.is-unrecorded-request——第二轮复核确认它是 <b>WKWebView 请求属性标记</b>（与 <code>WKWebViewConfigurationExtensions.swift</code> 同区），用于把部分请求排除出采集，与 Datadog 自家的 <code>com.datadoghq.is-internal-request</code>（防止 SDK 追踪自身请求）机制同构。同一区还嵌有 4 个 SPKI SHA-256 证书固定哈希</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="text-small"><b>这是重要的平衡信息</b>：第三方分析（Sift/Datadog/Sentry）名义上受 <code>ThirdPartyAnalyticsConsent</code> 控制，用户可在隐私设置中配置。但静态分析<b>无法确认</b>：默认值是什么、同意关闭后哪些通道真正停止、风控必需的事件是否豁免于同意。这一点需要运行时验证。</p>
+
+  <h4>新增维度：传输与存储安全（此前未涉及）</h4>
+  <ul>
+    <li><b>证书固定</b>：<code>spkiSHA256</code> 键与 SPKI SHA-256 实现痕迹；第二轮复核在 WebView 配置区又定位到 <b>4 个嵌入式证书固定哈希</b>（sha256 + sha256-long 格式），确认对关键域名做公钥固定，中间人抓包被拒 <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>本地库</b>：GRDB（SQLite）存储会话与消息，配合 <code>FileProtectionType</code> 分级（设备锁定时文件加密）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>无广告归因 SDK</b>：未发现 AppsFlyer/Adjust/Branch/Tenjin/Kochava/Amplitude/Mixpanel/Heap/Optimizely——<b>无跨 App 广告追踪链路</b> <span class="evi evi-none">【实锤·未发现】</span></li>
+  </ul>
+
+  <h4>新增维度：崩溃报告的设备画像（第三轮复核，KSCrash 上下文函数 0x1043c1a94 反编译）</h4>
+  <p class="text-small">崩溃事件远超"错误堆栈"——它是完整的<b>设备硬件与运行时画像</b>。从崩溃上下文字典构建函数（294 行，逐项填充）提取的字段清单：</p>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>类别</th><th>字段</th><th>画像价值</th></tr></thead>
+    <tbody>
+      <tr><td>设备指纹组合</td><td class="mono">machine、model、boot_time、storage、freeStorage、memory_limit</td><td>硬件型号 + 开机时间 + 存储余量，四者组合高度唯一</td></tr>
+      <tr><td>越狱与仿真</td><td class="mono">jailbroken、proc_translated（Rosetta 转译标记）</td><td>越狱 + 是否跑在模拟器/M 芯片伪装下</td></tr>
+      <tr><td>环境</td><td class="mono">time_zone（时区）、binary_arch、cpu_type/subtype</td><td>时区再次出现于崩溃通道</td></tr>
+      <tr><td>行为统计</td><td class="mono">active_time_since_last_crash、background_time_since_launch、launches_since_last_crash、sessions_since_launch、application_in_foreground、app_transition_state</td><td>使用时长/频率/前后台模式画像</td></tr>
+      <tr><td>安装标识</td><td class="mono">device_app_hash（<b>应用安装哈希</b>）、app_uuid</td><td>跨崩溃报告关联同一安装</td></tr>
+      <tr><td>运行时</td><td class="mono">memory_pressure、memory_footprint、console_log、process_id、parent_process_id</td><td>调试信息 + 进程树</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="text-small">崩溃经两条通道上报：<b>Sentry</b>（崩溃与性能，含 <code>is_emulator</code>、locale）与 <b>Datadog Crash Reporting</b>（KSCrashCore + backtrace-reporting）。同一设备画像由此再进两个第三方数据池。</p>
+
+  <h4>新增维度：时区采集的持久化链路（第三轮复核）</h4>
+  <p class="text-small">时区不只是"读取后随会话发走"。反编译确认完整链路：<code>readTimezoneOffset_</code> / <code>storeTimezoneOffset_</code> / <code>timezoneOffsetFilePath_</code>（<b>写入本地文件持久化</b>）/ <code>setTimezoneOffsetSeconds:</code>（注入 Datadog RUM 上下文）/ <code>[NSTimeZone systemTimeZone]</code> / <code>secondsFromGMT</code>。Firebase GoogleDataTransport 侧另有独立通道（<code>GDTCORClockTimezoneOffsetSeconds</code>）。即：<b>时区偏移被持久化到本地文件，并经 Datadog 与 Firebase 双通道上报</b> <span class="evi evi-seen">【实锤】</span>。</p>
+
+  <h4>方法论局限（必须显式声明）</h4>
+  <ol>
+    <li><b>Swift 寄存器上下文丢失</b>：Ghidra 对无符号 Swift 二进制丢失 <code>unaff_x20</code> 等上下文寄存器，导致对象归属（哪个字典、哪个实例）常有歧义——本报告所有"某字段写入某结构"的结论都受此影响，已逐项分级</li>
+    <li><b>字符串邻域归属法有系统性风险</b>：本节修正 4 中四个错误全部源于此法。字符串在二进制中的物理邻近<b>不等于</b>逻辑归属，需辅以地址区间、类导入与源码路径三重印证</li>
+    <li><b>事件名 ≠ 控制流</b>：遥测事件名（如 <code>LoginAttestationResolved</code>）证明"该场景有埋点"，不证明"该场景被强制拦截"</li>
+    <li><b>无运行时观测</b>：证书固定使中间人抓包困难，故字段实际取值、默认同意状态、开关有效性均未验证</li>
+    <li><b>Swift 解串器禁用</b>：函数名未还原，模块归属依赖源码路径断言与地址区间</li>
+  </ol>
+  <p class="text-small">综合可信度评分：采集通道存在性 <b>高</b>（多通道独立印证）；具体字段实际取值 <b>中</b>（结构确证，赋值未全追）；封号规则与决策 <b>不可知</b>（纯服务端）。</p>
 </div>
 
 <div id="p-end" role="tabpanel" aria-labelledby="tab-end" hidden>

@@ -1,0 +1,12 @@
+233064:X-Client-Request-Id
+233066:Anthropic-Client-Content-Width
+235703:Anthropic-Device-ID
+235728:Anthropic-Client-Platform
+235729:Anthropic-Client-OS-Version
+235730:X-Client-Geo-Region
+235731:Anthropic-Client-Build
+235732:Anthropic-Client-Version
+235733:Anthropic-Client-App
+235735:__Host-ant_trusted_device
+238021:Anthropic-Client-Capabilities
+262211:Anthropic-ProductAnalytics-Identity
