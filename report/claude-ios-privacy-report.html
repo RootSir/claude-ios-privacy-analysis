@@ -164,6 +164,10 @@ dl { margin: 8px 0; }
 <div id="p-flow" role="tabpanel" aria-labelledby="tab-flow" hidden>
   <h3>上报通道全景</h3>
   <p class="text-muted">按数据接收方分类。证据等级：<span class="evi evi-seen">实锤</span>=静态直接可见；<span class="evi evi-inf">推断</span>=基于 SDK 标准行为；<span class="evi evi-none">未发现</span>=静态未找到（≠运行时绝无）。</p>
+  <div class="card"><div class="card-body">
+    <b>第三方域名 ≠ 第三方拿走数据（租户关系）</b>
+    <p class="text-small" style="margin-top:6px;">Datadog（<code>us5.datadoghq.com</code>）、Sentry、Sift、Firebase 的端点都是各供应商自己的域名，但数据落进的是 <b>Anthropic 租用的账号/项目</b>：<code>puba761aba4349612e68bec5b9465ead1e2</code>（Anthropic 的 Datadog RUM client token，标识租户）、<code>ClaudeDatadogMonitoring/DatadogMonitoringClient.swift</code>（一方封装）、RUM 事件携带 <code>RUMAccount</code> 字段（会话关联账号）、内置 <code>us5.datadoghq.com/rum/sessions?query=</code> 会话检索深链。即：管道是供应商的，数据池是 Anthropic 可查询、可做仪表盘的。Datadog 为数据处理器，Anthropic 为数据控制者。</p>
+  </div></div>
   <div class="table-responsive">
   <table class="table table-sm">
     <thead><tr><th>接收方</th><th>端点</th><th>采集 / 上报内容</th><th>证据</th></tr></thead>
