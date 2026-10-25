@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude iOS App 逆向分析报告：隐私采集与风控信号</title>
+<style>
+:root {
+  --background: #f7f7f8; --foreground: #18181b;
+  --card: #ffffff; --card-foreground: #18181b;
+  --popover: #ffffff; --popover-foreground: #18181b;
+  --primary: #18181b; --primary-foreground: #fafafa;
+  --secondary: #f4f4f5; --secondary-foreground: #18181b;
+  --muted: #f4f4f5; --muted-foreground: #71717a;
+  --accent: #f4f4f5; --accent-foreground: #18181b;
+  --destructive: #dc2626; --border: #e4e4e7; --input: #e4e4e7; --ring: #a1a1aa;
+  --blue: #2563eb; --orange: #ea580c; --green: #16a34a; --red: #dc2626;
+  --purple: #7c3aed; --yellow: #ca8a04;
+  --font-size-base: 15px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #18181b; --foreground: #fafafa;
+    --card: #27272a; --card-foreground: #fafafa;
+    --popover: #27272a; --popover-foreground: #fafafa;
+    --primary: #fafafa; --primary-foreground: #18181b;
+    --secondary: #3f3f46; --secondary-foreground: #fafafa;
+    --muted: #3f3f46; --muted-foreground: #a1a1aa;
+    --accent: #3f3f46; --accent-foreground: #fafafa;
+    --destructive: #ef4444; --border: #3f3f46; --input: #3f3f46; --ring: #52525b;
+    --blue: #60a5fa; --orange: #fb923c; --green: #4ade80; --red: #f87171;
+    --purple: #a78bfa; --yellow: #facc15;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 24px clamp(16px, 4vw, 48px) 64px;
+  background: var(--background); color: var(--foreground);
+  font-size: var(--font-size-base); line-height: 1.6;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+}
+h1 { font-size: calc(var(--font-size-base) + 8px); margin: 0 0 8px; }
+h2 { font-size: calc(var(--font-size-base) + 4px); margin: 8px 0; }
+h3, h4 { font-size: calc(var(--font-size-base) + 1px); margin: 18px 0 8px; }
+p { margin: 8px 0; }
+ul, ol { margin: 8px 0; padding-left: 22px; }
+li { margin: 4px 0; }
+code {
+  background: var(--muted); color: var(--card-foreground);
+  border-radius: 4px; padding: 1px 5px;
+  font-size: 0.85em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+hr { border: 0; border-top: 1px solid var(--border); margin: 20px 0; }
+dl { margin: 8px 0; }
+.card {
+  background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--border); border-radius: 12px;
+}
+.card-body { padding: 14px 16px; }
+.text-muted { color: var(--muted-foreground); }
+.text-small { font-size: 13px; }
+.text-end { text-align: right; }
+.text-center { text-align: center; }
+.text-nowrap { white-space: nowrap; }
+.viz-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.viz-stat-value { font-size: calc(var(--font-size-base) + 5px); font-weight: 500; line-height: 1.3; }
+.nav-pills { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px; background: var(--muted); border-radius: 10px; width: fit-content; max-width: 100%; }
+.nav-link {
+  appearance: none; border: 0; background: transparent; color: var(--muted-foreground);
+  border-radius: 7px; padding: 5px 14px; font-size: 14px; cursor: pointer; font-family: inherit;
+}
+.nav-link.active { background: var(--card); color: var(--card-foreground); font-weight: 500; }
+.nav-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.table-responsive { overflow-x: auto; margin: 8px 0; }
+.table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.table th { text-align: left; color: var(--muted-foreground); font-weight: 500; }
+.table th, .table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.table td code, .table th code { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="claude-ios-privacy-report">
+<style>
+  #claude-ios-privacy-report .evi { display:inline-flex; align-items:center; gap:4px; font-weight:500; white-space:nowrap; }
+  #claude-ios-privacy-report .evi-seen { color: var(--green); }
+  #claude-ios-privacy-report .evi-inf  { color: var(--orange); }
+  #claude-ios-privacy-report .evi-none { color: var(--muted-foreground); }
+  #claude-ios-privacy-report .mono { font-size: 12px; }
+  #claude-ios-privacy-report pre.code {
+    background: var(--muted); color: var(--card-foreground);
+    border-radius: 8px; padding: 12px 14px; overflow-x: auto;
+    font-size: 12px; line-height: 1.55; margin: 8px 0 0;
+  }
+  #claude-ios-privacy-report pre.code code { background: transparent; padding: 0; font-size: 12px; }
+  #claude-ios-privacy-report .kv { display:grid; grid-template-columns: auto 1fr; gap: 2px 12px; align-items: baseline; }
+  #claude-ios-privacy-report .kv dt { color: var(--muted-foreground); }
+  #claude-ios-privacy-report .kv dd { margin: 0; word-break: break-all; }
+  #claude-ios-privacy-report .flow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin: 6px 0; }
+  #claude-ios-privacy-report .flow .step {
+    background: var(--secondary); color: var(--secondary-foreground);
+    border-radius: 6px; padding: 4px 10px; font-size: 12px;
+  }
+  #claude-ios-privacy-report .flow .arr { color: var(--muted-foreground); font-size: 12px; }
+  #claude-ios-privacy-report h3 { margin-top: 20px; }
+  #claude-ios-privacy-report .hr-label { color: var(--muted-foreground); margin-top: 14px; }
+</style>
+
+<h2>Claude iOS App 逆向分析报告：隐私采集与风控信号全景</h2>
+<p class="text-muted">样本 Claude-1.261023.20-decrypted.ipa · 分析完成于 2026-10-25 · 静态逆向（Ghidra 全量反编译 + otool/nm/strings/plutil 交叉验证）</p>
+
+<div class="viz-grid" style="margin: 12px 0 4px;">
+  <div class="card"><div class="card-body">
+    <div class="text-muted text-small">样本</div>
+    <div class="viz-stat-value">v1.261023.20</div>
+    <div class="text-small">com.anthropic.claude · arm64 原生 Swift/SwiftUI · 主二进制 133 MB</div>
+  </div></div>
+  <div class="card"><div class="card-body">
+    <div class="text-muted text-small">最重的风控组件</div>
+    <div class="viz-stat-value">App Attest + Sift</div>
+    <div class="text-small">苹果硬件级设备证明 × 商业反欺诈平台双重设备指纹</div>
+  </div></div>
+  <div class="card"><div class="card-body">
+    <div class="text-muted text-small">客户端 VPN / IP 主动探测</div>
+    <div class="viz-stat-value">未发现</div>
+    <div class="text-small">判定依赖服务端 TCP 源 IP 与第三方风控的 IP 侧分析</div>
+  </div></div>
+</div>
+
+<div class="nav nav-pills" role="tablist" aria-label="报告章节" style="margin: 14px 0;">
+  <button class="nav-link active" id="tab-sum" role="tab" aria-controls="p-sum" aria-selected="true" type="button">总览</button>
+  <button class="nav-link" id="tab-flow" role="tab" aria-controls="p-flow" aria-selected="false" type="button">数据流</button>
+  <button class="nav-link" id="tab-dim" role="tab" aria-controls="p-dim" aria-selected="false" type="button">六维信号</button>
+  <button class="nav-link" id="tab-trust" role="tab" aria-controls="p-trust" aria-selected="false" type="button">设备信任链</button>
+  <button class="nav-link" id="tab-dec" role="tab" aria-controls="p-dec" aria-selected="false" type="button">反编译证据</button>
+  <button class="nav-link" id="tab-more" role="tab" aria-controls="p-more" aria-selected="false" type="button">其他隐私面</button>
+  <button class="nav-link" id="tab-ban" role="tab" aria-controls="p-ban" aria-selected="false" type="button">封号维度</button>
+  <button class="nav-link" id="tab-end" role="tab" aria-controls="p-end" aria-selected="false" type="button">端点清单</button>
+  <button class="nav-link" id="tab-met" role="tab" aria-controls="p-met" aria-selected="false" type="button">方法与结论</button>
+</div>
+
+<div id="p-sum" role="tabpanel" aria-labelledby="tab-sum">
+  <h3>样本概况</h3>
+  <dl class="kv">
+    <dt>应用</dt><dd>Claude（Anthropic）<code>com.anthropic.claude</code>，Team ID <code>Q6L2SF6YDW</code>，App Store 已脱壳</dd>
+    <dt>版本</dt><dd>1.261023.20（构建 40055868669）</dd>
+    <dt>架构</dt><dd>原生 Swift/SwiftUI 单体二进制（133 MB，App Store strip 后无本地符号），SPM 静态库 69 个资源 bundle + 3 个动态框架（LinkKit、LiveKitWebRTC、Sentry）+ 5 个扩展进程</dd>
+    <dt>API 基址</dt><dd><code>https://claude.ai/api</code>（预发 <code>claude-ai.staging.ant.dev</code>，API <code>api.anthropic.com</code> 部分路径）</dd>
+    <dt>关键 entitlements</dt><dd>App Attest（生产环境）、Apple SignIn、HealthKit、CarPlay 语音、声明式年龄段、时间敏感通知、应用组 <code>group.com.anthropic.claude</code></dd>
+  </dl>
+
+  <h3>核心结论</h3>
+  <ol>
+    <li><b>客户端代码中没有针对 VPN 和真实 IP 的主动探测逻辑</b> <span class="evi evi-seen">【实锤·未发现】</span>——全二进制无 <code>utun</code> 接口扫描、无 ipify/whatismyip/stun 客户端探测请求。出口 IP 判定完全依赖服务端（TCP 源 IP、CDN 边缘字段）与 Sift 的 IP 侧风控。</li>
+    <li><b>设备身份绑定是全链路的</b> <span class="evi evi-seen">【实锤】</span>——每个 API 请求携带 <code>Anthropic-Device-ID</code>；登录、会话、内购、积分兑换全流程要求 App Attest / DeviceCheck 证明；存在周期性「会话重证明」（Reattest）机制与专用端点。</li>
+    <li><b>Sift Science 商业反欺诈 SDK 完整嵌入</b> <span class="evi evi-seen">【实锤】</span>——采集设备属性并经 Keychain 持久化设备标识（应用重装不消失），上报至 <code>api3.siftscience.com</code>。应用自己的遥测配置里存在 <code>siftOnly / fraudMonitoring</code> 事件分类，即有专门只送给风控通道的事件。</li>
+    <li><b>SIM 卡国家码等运营商信息由 Datadog SDK 采集上报</b> <span class="evi evi-seen">【实锤】</span>——<code>carrierISOCountryCode / mobileCountryCode / radioAccessTechnology / carrierAllowsVOIP</code> 字符串紧邻 Datadog SDK 代码区，随 RUM 会话上报 <code>us5.datadoghq.com</code>。这意味着即使走 VPN，SIM 归属地仍会出现在遥测里。</li>
+    <li><b>位置采集克制</b> <span class="evi evi-seen">【实锤】</span>——仅申请「使用期间」定位；CLLocationManager/CLGeocoder 是助手的位置工具（用户主动触发）；无常驻后台定位。另有按国家触发的 Yoti 年龄验证流程。</li>
+    <li>封禁判定不在 App 内：<b>App 是信号采集端，判定在服务端</b>——同一台设备上换账号，会经 DeviceCheck（硬件级、服务端可写 2 bit 标记）、App Attest 密钥、Keychain 残留标识、Sift 设备图谱在服务端重新关联 <span class="evi evi-inf">【推断】</span>。</li>
+  </ol>
+</div>
+
+<div id="p-flow" role="tabpanel" aria-labelledby="tab-flow" hidden>
+  <h3>上报通道全景</h3>
+  <p class="text-muted">按数据接收方分类。证据等级：<span class="evi evi-seen">实锤</span>=静态直接可见；<span class="evi evi-inf">推断</span>=基于 SDK 标准行为；<span class="evi evi-none">未发现</span>=静态未找到（≠运行时绝无）。</p>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>接收方</th><th>端点</th><th>采集 / 上报内容</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td><b>Anthropic 后端</b></td><td class="mono">https://claude.ai/api</td><td>自定义请求头组（见六维-设备指纹）、<code>Anthropic-Device-ID</code>、会话 Cookie <code>__Host-ant_trusted_device</code>、App Attest 挑战应答、TCP 源 IP（服务端侧）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>Sift Science</b><br>（商业反欺诈）</td><td class="mono">api3.siftscience.com<br>/v3/accounts/%@/mobile_events</td><td><code>SiftIosDevicePropertiesCollector</code> 设备属性、<code>SiftKeychain</code> 钥匙串持久标识、<code>com.sift.initial_device_ifv</code>（首次 IDFV）、App 状态事件、beaconKey；遥测分类含 <code>siftOnly / fraudMonitoring</code></td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>Datadog RUM<br>+ 崩溃</b></td><td class="mono">us5.datadoghq.com<br>/rum/sessions</td><td>设备型号/OS/App 版本、<b>SIM 国家码与运营商</b>（carrierISOCountryCode 等）、网络连接类型（RUMConnectivity）、URLSession 一方主机追踪（URLSessionInstrumentationFirstPartyHostsTracing）、NTP 校时（DatadogNTPDateProvider）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>Sentry ×2</b></td><td class="mono">o1158394.ingest.us.sentry.io<br>(4507115472551936 / 4510189717356544)</td><td>崩溃与性能事件，含 <code>is_emulator</code>、<code>SentryLocale</code> 语言环境等设备上下文</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>Firebase / Google</b></td><td class="mono">play.googleapis.com/log<br>firebaseinstallations</td><td>Firebase 安装 ID（FID）、FCM 推送 token、GoogleDataTransport 时钟数据（<code>GDTCORClockTimezoneOffsetSeconds</code> <b>时区偏移</b>）、Maps/Places SDK 位置与网络数据</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>LiveKit WebRTC</b><br>（语音模式）</td><td class="mono">WebRTC 媒体通道<br>ICE/STUN/TURN</td><td>网络接口枚举（含 <code>utun</code> 识别）、ICE 候选地址；若 VPN 不覆盖 UDP/IPv6，媒体服务器可看到真实出口地址</td><td><span class="evi evi-seen">实锤</span> <span class="evi evi-inf">推断</span></td></tr>
+      <tr><td><b>Plaid LinkKit</b><br>（财务功能）</td><td class="mono">Plaid Link 流程</td><td>银行账户绑定（SunnyPuddle 财务助手功能）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>Yoti</b></td><td class="mono">claude.ai/api/yoti/<br>age-verification/start</td><td>按国家触发的年龄验证（_isCountryAwareAgeVerificationEnabled）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>登录后的身份与会话结构</h3>
+  <div class="flow">
+    <span class="step">AppAuth/Google OAuth 登录</span><span class="arr">→</span>
+    <span class="step">LoginAttestation（App Attest 挑战）</span><span class="arr">→</span>
+    <span class="step">会话 Cookie + __Host-ant_trusted_device</span><span class="arr">→</span>
+    <span class="step">SessionReattest 周期性重证明</span><span class="arr">→</span>
+    <span class="step">DeviceCheck token 刷新（isDeviceCheckTokenRefreshEnabled）</span>
+  </div>
+  <p class="text-small">会话存储：<code>com.anthropic.claude.session.*</code>（UserDefaults，<code>session.activeAccountId</code> 多账号）+ Keychain 访问组 <code>Q6L2SF6YDW.com.anthropic.claude.shared</code>（跨扩展共享）。</p>
+</div>
+
+<div id="p-dim" role="tabpanel" aria-labelledby="tab-dim" hidden>
+  <h3>① VPN 检测</h3>
+  <p><b>Claude 自身代码无 VPN 专项检测</b> <span class="evi evi-none">【实锤·未发现】</span>。全程序反编译（68.9 万函数）后，仅有的 2 处 <code>getifaddrs</code> 调用者已定性并归属 <b>Google Maps SDK</b> 静态链接区段：一个是「是否蜂窝网络」布尔判定（接口名前缀 <code>pdp_ip</code>，见反编译章节①），一个是本地 IPv4/IPv6 地址枚举器（见②）——均服务于地图网络分类，结果流向 Google；<code>utun</code> 字符串只出现在 LiveKitWebRTC 框架（语音模式 WebRTC 标准网络枚举）。Claude 请求路径上没有任何 VPN/代理探测。VPN 判定实际来自：服务端 IP 信誉、IP 与时区/语言/SIM 的一致性校验、Sift 的 IP 侧数据 <span class="evi evi-inf">【推断】</span>。</p>
+
+  <h3>② 时区</h3>
+  <p>无「读取时区并主动上报给 claude.ai」的专用请求字段 <span class="evi evi-none">【实锤·未发现】</span>，但时区经两条路流出：Firebase GoogleDataTransport 上传<b>时区偏移</b>（<code>GDTCORClockTimezoneOffsetSeconds</code>、"Reading timezone offset" 日志串）<span class="evi evi-seen">【实锤】</span>；<b>Datadog RUM 明确写入时区偏移</b>——反编译确认 <code>[obj setTimezoneOffsetSeconds:]</code>（0x105903140）、<code>[NSTimeZone systemTimeZone]</code>（0x10590b700）、<code>secondsFromGMT</code>（0x1058eff00）三个采集点 <span class="evi evi-seen">【实锤】</span>；Sentry 会话上下文按 SDK 标准行为携带语言环境 <span class="evi evi-inf">【推断】</span>。此外服务端可对比请求时间与出口 IP 所在地时区（无需客户端上报）。</p>
+
+  <h3>③ 时间</h3>
+  <p><code>DatadogNTPDateProvider</code> 用 NTP 服务器校准事件时间 <span class="evi evi-seen">【实锤】</span>，客观上可检测本地时钟篡改；隐私清单声明 <code>SystemBootTime</code> 访问（35F9.1，运行时长测量）；全部遥测事件携带客户端时间戳。</p>
+
+  <h3>④ 位置</h3>
+  <p>仅 <code>NSLocationWhenInUseUsageDescription</code>，<b>无 Always/后台定位 entitlement</b> <span class="evi evi-seen">【实锤】</span>。<code>ClaudeTools.LocationManager / CoreLocationService / CLGeocoder</code> 是助手的位置工具（用户在对话中触发）；Google Maps/Places 在使用地图功能时采集；注册手机验证流程收集国家码（用户选择器）；Yoti 年龄验证按国家启用。（勘误：<code>geo.region.iso_code</code> 是 OpenTelemetry 语义约定字段表、<code>policyCountryCode</code> 是 Google Maps proto 字段，均非 Anthropic 采集项。）</p>
+
+  <h3>⑤ 真实 IP 探测</h3>
+  <p><b>无客户端主动探测</b> <span class="evi evi-none">【实锤·未发现】</span>：全二进制无 ipify/icanhazip/ipinfo/whatismyip 类请求；请求头构建函数中也没有任何 IP 字段。不需要——每个 HTTPS 请求的 TCP 源 IP 就是服务端看到的 IP。<code>X-FORWARDED-FOR / clientIp</code> 字符串属于 Google Maps SDK。唯一可能绕过 VPN 的客户端路径是<b>语音模式 WebRTC</b>：ICE 候选若走 UDP/IPv6 而 VPN 不覆盖，LiveKit 媒体服务器可见真实地址 <span class="evi evi-inf">【推断】</span>。</p>
+
+  <h3>⑥ 设备指纹（采集面最广）</h3>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>标识 / 信号</th><th>载体</th><th>持久性</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td><code>Anthropic-Device-ID</code> 头</td><td>本地 UUID（DeviceIdStore 持久化），每个 API 请求随行</td><td>应用数据</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>App Attest 密钥 + 断言</td><td>苹果硬件级证明，绑定登录/会话/内购/积分</td><td>系统级（不可迁移）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>DeviceCheck token</td><td>苹果设备唯一 token；服务端可为每台设备写 2 bit 标记（可用作封禁标记位）</td><td>系统级</td><td><span class="evi evi-seen">实锤存在</span> <span class="evi evi-inf">用途推断</span></td></tr>
+      <tr><td>Sift Keychain 标识 + 首次 IDFV</td><td><code>com.sift.initial_device_ifv</code>；应用重装不清 Keychain 即保留</td><td>系统钥匙串</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>SIM 国家码 / 运营商 / 接入技术</td><td>Datadog RUM（CTTelephonyNetworkInfo）</td><td>随会话</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>平台/OS/版本/构建头组</td><td><code>Anthropic-Client-Platform / OS-Version / Version / Build / App</code></td><td>随请求</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>区域头 <code>X-Client-Geo-Region</code></td><td>网络上下文缓存的区域值（服务端 bootstrap 下发），<b>缺省兜底硬编码 "US"</b>（反编译确认）；每请求另有随机 <code>X-Client-Request-Id</code> 与授权路径 <code>X-Authorization</code></td><td>随请求</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>Firebase FID / FCM token</td><td>Firebase Installations</td><td>系统钥匙串</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>Sentry 安装 ID / is_emulator</td><td>Sentry 崩溃与性能上下文</td><td>系统钥匙串</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>Datadog anonymous ID</td><td>AnonymousIdentifierManager</td><td>本地</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>越狱痕迹检查</td><td>KSCrash 崩溃采集器（MobileSubstrate 路径探测）</td><td>随崩溃报告</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>模拟器检测</td><td>Sentry 性能数据 <code>is_emulator</code> 字段、<code>isSimulator</code> 构建判断</td><td>随遥测</td><td><span class="evi evi-seen">实锤</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div id="p-trust" role="tabpanel" aria-labelledby="tab-trust" hidden>
+  <h3>App Attest / DeviceCheck 信任链（对封号最关键）</h3>
+  <p>entitlements 含 <code>com.apple.developer.devicecheck.appattest-environment = production</code>。相关类与事件名串起完整闭环：</p>
+  <div class="flow">
+    <span class="step">AppAttestEnroller 注册</span><span class="arr">→</span>
+    <span class="step">Challenge / RegisterAnswer</span><span class="arr">→</span>
+    <span class="step">bind_attestation 绑定账号</span><span class="arr">→</span>
+    <span class="step">__Host-ant_trusted_device Cookie</span><span class="arr">→</span>
+    <span class="step">SessionReattest 周期重证明</span><span class="arr">→</span>
+    <span class="step">RotateReattestCredential 轮换</span>
+  </div>
+  <ul>
+    <li>触发面覆盖：<b>登录</b>（<code>LoginAttestationResolved / LoginEmailSendAttestationResolved</code>）、<b>会话</b>（<code>SessionReattestResult / Prompted / Skipped / Deferred</code>、<code>mobile_code_session_reattest_*</code>）、<b>内购</b>（<code>ios_iap_receipt_app_attest[_assertion]</code>）、<b>积分领取</b>（<code>UsageCreditsClaimAttestationResolved</code>）<span class="evi evi-seen">【实锤】</span></li>
+    <li>专用端点：<code>api/auth/session_reattest/device_key[/challenge]</code>、<code>/rotate_reattest</code>；Keychain 前缀 <code>com.anthropic.claude.trusted_device.reattest.</code>；协议标签 <code>anthropic.reattest.v1 / anthropic.reattest_rotate.v1</code> <span class="evi evi-seen">【实锤】</span></li>
+    <li>分级开关（服务端 feature flag 控制）：<code>_isIapReceiptAppAttestEnabled / _isIapReceiptDeviceCheckTokenEnabled / _isIapReceiptAppAttestAssertionEnabled / _isDeviceCheckTokenRefreshEnabled / _isAppAttestKeyDiscardAfterInvalidInputEnabled</code> <span class="evi evi-seen">【实锤】</span></li>
+    <li>失败路径有完整遥测：<code>AttestationKeyProblem / MissingClientAttestationError / deviceCheckMintError / AttestingRawSessionEventsApi</code>——证明失败本身也上报</li>
+  </ul>
+  <h3>Sift Science 集成</h3>
+  <ul>
+    <li>内嵌 <code>sift_ios</code> v2.2.3 全 SDK：设备属性采集器、App 状态采集器、Keychain 存储、令牌桶限速上传器 <span class="evi evi-seen">【实锤】</span></li>
+    <li>Anthropic 侧封装 <code>ClaudeSift</code>；遥测管道配置含 <code>sendsAnalytics / allowed / blocked / undecided / siftOnly / monitoringClient / telemetry / fatalEvents / fraudMonitoring</code> 枚举——部分事件<b>只</b>进入风控通道</li>
+    <li>Sift 平台能力（多账号设备关联、封禁规避评分、设备群控识别）在服务端消费这些数据 <span class="evi evi-inf">【推断】</span></li>
+  </ul>
+</div>
+
+<div id="p-dec" role="tabpanel" aria-labelledby="tab-dec" hidden>
+  <h3>Ghidra 全量反编译</h3>
+  <p class="text-muted">Ghidra 12.1.4 headless 全程序自动分析（AARCH64:AppleSilicon:swift）：识别 <b>688,893 个函数</b>，分析耗时 7190 秒，程序库 2.1 GB；随后按字符串引用与导入符号追踪定向导出 41 个安全相关函数的伪代码。App Store 签名二进制无本地符号，函数名为地址名（FUN_*）；ObjC 元数据分析器（崩溃缺陷）与逐符号派生进程的 Swift 解串器已禁用，不影响字符串引用与反编译。</p>
+
+  <h3>① 蜂窝网络检测（专属函数）</h3>
+  <p>独立布尔函数：遍历系统网络接口，任一接口名以 <code>pdp_ip</code> 开头（iPhone 蜂窝数据接口）即返回真。位于 Google Maps SDK 静态链接区段（0x104–0x105 区间，与 <code>geo.region.iso_code</code>、GMSPaint 同域）。</p>
+  <pre class="code"><code>bool FUN_1055439e8(void) {
+    ifaddrs *list = 0;
+    if (getifaddrs(&list) == 0) {
+        for (ifaddrs *p = list->ifa_next; p != 0; p = p->ifa_next)
+            if (strncmp(p->ifa_name, "pdp_ip", 6) == 0) { freeifaddrs(list); return true; }
+        freeifaddrs(list);
+    }
+    return false;
+}</code></pre>
+
+  <h3>② 本地 IP 地址枚举</h3>
+  <p>第二处 <code>getifaddrs</code> 调用者：收集所有「已启用且非回环」（<code>ifa_flags &amp; 9 == 1</code>）接口的 IPv4（<code>inet_ntoa</code>）与 IPv6（<code>inet_ntop</code>）地址，装进数组返回。同样位于 Google Maps 区段。</p>
+  <pre class="code"><code>if (getifaddrs(&amp;list) == 0) {
+    arr = [NSMutableArray new];
+    for (ifaddrs *p = list; p; p = p->ifa_next) {
+        if ((p->ifa_flags &amp; 9) == 1) {           // IFF_UP 且非 IFF_LOOPBACK
+            if (p->ifa_addr->sa_family == AF_INET)
+                [arr addObject:@(inet_ntoa(...))];   // IPv4
+            else if (p->ifa_addr->sa_family == AF_INET6)
+                [arr addObject:@(inet_ntop(...))];   // IPv6
+        }
+    }
+}</code></pre>
+
+  <h3>③ 请求头构建函数（0x100ababe8）</h3>
+  <p>构建发往 claude.ai/api 的全部自定义头。三个此前未定的细节在伪代码里全部落定：</p>
+  <ul>
+    <li><b>每请求随机 UUID</b>：<code>Foundation.UUID → uuidString → lowercased()</code> 插入字典（对应 <code>X-Client-Request-Id</code>）</li>
+    <li><b>X-Authorization 头</b>（从机器码字面量解码，<code>0x726f687475412d58</code> = "X-Author"）：授权路径下由上下文标志位（+0x48）控制添加</li>
+    <li><b>Geo-Region 兜底值是硬编码 "US"</b>：Swift 小字符串字面量（<code>0x5355</code> = "US"，判别码 0xe2）直接传入 Geo 插入助手</li>
+  </ul>
+  <pre class="code"><code>// 插入助手：键长 0x13 = 19 = "X-Client-Geo-Region"（来自字面量池）
+void FUN_100abb928(str value) { dict["X-Client-Geo-Region"] = value; }
+...
+FUN_1001b63bc("Anthropic-Device-ID");       // 设备 ID 头（持久化 UUID）
+UUID().uuidString.lowercased();              // 每请求新随机 ID
+if (ctx-&gt;flag48) {
+    if ((v = FUN_100abba6c()) != nil)
+        FUN_100abb390(dict, v, "X-Authorization");  // 授权头
+    FUN_100abb928("US");                     // Geo-Region 默认值 "US"
+}</code></pre>
+  <p class="text-small">即：<code>X-Client-Geo-Region</code> = 网络上下文对象缓存的区域值，缺省时回退 <b>"US"</b>——该值不在客户端做 IP 计算而是服务端下发缓存 + 本地兜底。</p>
+
+  <h3>④ Datadog SDK：时区与 SIM 国家码采集器（0x1058–0x1059 区段）</h3>
+  <p>Datadog 区域内逐一确认了这些 ObjC 访问器的调用：</p>
+  <pre class="code"><code>[obj setTimezoneOffsetSeconds:]   // 0x105903140 —— 把时区偏移写入 RUM 上下文
+[NSTimeZone systemTimeZone]       // 0x10590b700
+[TimeZone secondsFromGMT]         // 0x1058eff00
+[obj mobileCountryCode]           // 0x1058dec00 —— 运营商国家码读取</code></pre>
+
+  <h3>⑤ 一方模块归属（Swift 源码路径保留在断言/日志字符串中）</h3>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>源码路径</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">ClaudeDeviceCheck/DeviceCheckTokenReporter.swift</td><td>DeviceCheck token 上报器（0x10441be18）</td></tr>
+      <tr><td class="mono">ClaudeTrustedDevice/TrustedDeviceStore.swift</td><td>可信设备存储（Reattest 密钥管理，0x1010aff78 / 0x1010b1698）</td></tr>
+      <tr><td class="mono">anthropic.reattest_rotate.v1</td><td>重证明密钥轮换协议标签（0x1013db750 实际引用）</td></tr>
+      <tr><td class="mono">ClaudeSentry/SentryBootstrap.swift</td><td>Sentry 初始化模块（0x1040cb404）</td></tr>
+      <tr><td class="mono">[CLLocationManager requestWhenInUseAuthorization]</td><td>定位授权请求（0x1058ecc60，使用期间定位）</td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div id="p-more" role="tabpanel" aria-labelledby="tab-more" hidden>
+  <h3>六维之外的隐私面：能定位/识别用户的其余数据</h3>
+
+  <h4>强身份锚点</h4>
+  <ul>
+    <li><b>手机号验证</b>：PhoneNumberKit + <code>onboarding.phone_verification.*</code>（国家码选择器、运营商国家提示）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>Google OAuth</b>：<code>accounts.google.com/o/oauth2/v2/auth</code>，申请 <code>userinfo.email</code> 与 <code>userinfo.profile</code>；另有 Apple Sign-In entitlement <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>Yoti 年龄验证</b>（按国家启用 <code>_isCountryAwareAgeVerificationEnabled</code>）+ 苹果系统声明年龄段 entitlement（<code>declared-age-range</code>、<code>isAgeVerifiedBySystem</code>）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>银行账户绑定</b>：Plaid LinkKit（SunnyPuddle 财务助手）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>邮箱接入</b>：Gmail MCP 服务器、Microsoft 365 MCP（<code>microsoft365.mcp.claude.com</code>）<span class="evi evi-seen">【实锤】</span></li>
+  </ul>
+
+  <h4>内容与行为数据</h4>
+  <ul>
+    <li>聊天内容与<b>文件上传</b>（<code>/v1/filestore/fs/createFile</code>）；Claude Code 会话（代码内容）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>照片库读取</b>（"show your recent photos"）+ 相机；发送图片有 <code>pictureLocationRemover</code> 剥离位置 EXIF <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>健康数据读写</b>：HealthKit entitlement + <code>HKSampleQueryDescriptor/HKAsyncQuery</code> 实际查询代码（用户发起的助手场景）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>日历/提醒完整访问</b> + 闹钟写入（Full Access 级权限声明）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>语音生物特征</b>：语音对话音频流（LiveKit/WebRTC）、听写、音量历史（AmplitudeHistory）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>UI 行为遥测</b>：RUMActionEvent（点击/滑动）+ 自定义事件（TappedLink、WidgetActionTapped、KeyboardShortcutsListCloseTapped 等）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>一方主机网络追踪</b>：URLSessionInstrumentation 把请求 URL/时延/状态码送进 Datadog <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>使用模式</b>：Sift iosAppStateCollector（前后台切换习惯）<span class="evi evi-seen">【实锤】</span></li>
+  </ul>
+
+  <h4>本机环境与安装画像</h4>
+  <ul>
+    <li><b>已装应用探测</b>：LSApplicationQueriesSchemes 声明 <code>cydia</code>（越狱标记）与 <code>googlechromes</code>（Chrome 是否安装）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>越狱检测</b>：SentryCrashMonitor_System（MobileSubstrate、/etc/apt、收据类型 app store/adhoc/sandbox）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>剪贴板</b>：UIPasteboard 写入（local-only、过期选项）+ <code>UIPasteboardChangedNotification</code> 变更监听 <span class="evi evi-seen">【实锤】</span>；未发现读取内容的专属路径</li>
+    <li><b>模拟器检测</b>（is_emulator 入 Sentry 性能数据）；<b>系统状态</b>：SystemBootTime/kern.boottime（运行时长）<span class="evi evi-seen">【实锤】</span></li>
+    <li>Face ID（本地认证；认证事件可入遥测）<span class="evi evi-inf">【推断】</span></li>
+  </ul>
+
+  <h4>屏幕与输入捕获</h4>
+  <ul>
+    <li><b>Sentry Session Replay 屏幕录制回放</b>：<code>SentrySessionReplayIntegration / SentryReplayView / SessionReplayPrivacyLevel</code> 模块完整集成，隐私级别可配置；是否常开由服务端配置决定 <span class="evi evi-seen">【集成实锤】</span> <span class="evi evi-inf">【启用状态需运行时确认】</span></li>
+    <li><b>WebKit 权限行为上报</b>：网页请求定位/动作权限被拒也作为事件上报（LocationRefusalListener / MotionAskReportListener）<span class="evi evi-seen">【实锤】</span></li>
+  </ul>
+
+  <h4>跨进程与持久化</h4>
+  <ul>
+    <li>Keychain 共享组（App 重装不清理即残留标识）+ 应用组 <code>group.com.anthropic.claude</code>（主 App 与 5 个扩展共享数据）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>Spotlight 索引</b>：聊天内容进系统搜索索引（本机）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>推送内容处理</b>：NotificationService 扩展接触消息明文（经 APNs 通道）<span class="evi evi-seen">【实锤】</span></li>
+  </ul>
+
+  <h4>隐私正向项（公平起见）</h4>
+  <ul>
+    <li>发送图片剥离位置 EXIF（pictureLocationRemover）<span class="evi evi-seen">【实锤】</span></li>
+    <li><b>无 IDFA/广告标识符</b>（未导入 ASIdentifierManager）；无通讯录/蓝牙/本地网络/后台定位权限 <span class="evi evi-none">【实锤·未发现】</span></li>
+    <li>PrivacyInfo.xcprivacy 声明 NSPrivacyCollectedDataTypes 为空；Firebase 配置 IS_ANALYTICS_ENABLED=false；定位仅 WhenInUse</li>
+  </ul>
+</div>
+
+<div id="p-ban" role="tabpanel" aria-labelledby="tab-ban" hidden>
+  <h3>封号维度：对中国用户场景的执行架构分析</h3>
+  <p class="text-muted">本章仅描述逆向可见的<b>信号采集与身份关联架构</b>（系统如何工作），不构成任何规避指引。所有封号<b>规则、阈值与策略均不可见</b>——它们完全在服务端。</p>
+
+  <h4>结论一：客户端零封号逻辑，判定 100% 在服务端</h4>
+  <ul>
+    <li>全二进制<b>没有任何本地封号/停用/地区封锁文案</b>（搜遍 banned/suspended/violation/unsupported-country 等，无一命中用户可见字符串）——封号提示全部由服务端接口动态下发 <span class="evi evi-seen">【实锤·未发现】</span></li>
+    <li>客户端没有任何"地区不允许"的本地判断分支；唯一的地理字段 <code>X-Client-Geo-Region</code> 是<b>服务端算好下发、客户端缓存回传</b>的（缺省兜底 "US"，见反编译章节③）——即地理判定本身就在服务端完成 <span class="evi evi-seen">【实锤】</span></li>
+    <li>App 完整支持简体中文本地化（zh-Hans）——客户端层面并不区分/排斥中国用户 <span class="evi evi-seen">【实锤】</span></li>
+  </ul>
+
+  <h4>结论二：能指向"中国用户"的信号清单（及 VPN 下的可见性）</h4>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>信号</th><th>采集路径</th><th>走 VPN 时是否仍暴露</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td>TCP 出口 IP</td><td>服务端直接可见（CDN 边缘 + 信誉库）</td><td>VPN 出口 IP 本身成为新信号（机房 IP 信誉、ASN 类型、与手机号/时区不一致性）</td><td><span class="evi evi-inf">推断</span></td></tr>
+      <tr><td><b>SIM 卡国家码</b>（中国移动/联通/电信 = CN）</td><td>Datadog RUM <code>carrierISOCountryCode/mobileCountryCode</code>（0x1058dec00 等）</td><td><b>是——VPN 不改 SIM</b>，遥测会话里 CN 运营商与时区、出口 IP 并存</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td><b>时区偏移</b>（Asia/Shanghai = +28800s）</td><td>Datadog <code>setTimezoneOffsetSeconds:</code> + Firebase GDT 时钟数据</td><td><b>是——跟随系统设置</b></td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>语言/地区格式</td><td>Sentry 上下文（SentryLocale）、系统 Locale</td><td><b>是——跟随系统设置</b></td><td><span class="evi evi-seen">实锤存在</span></td></tr>
+      <tr><td>手机号国家码（+86）</td><td>注册手机验证流程（PhoneNumberKit 国家码选择器 + <code>onboarding.phone_verification.*</code> 事件）</td><td>是（号码本身即归属地）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td>支付地区</td><td>内购收据 + App Attest 绑定（<code>ios_iap_receipt_app_attest</code>）；Apple ID 账单地区随收据可见</td><td>是（收据不因 VPN 改变）</td><td><span class="evi evi-seen">机制实锤</span> <span class="evi evi-inf">地区可见性推断</span></td></tr>
+      <tr><td>语音模式真实 IP</td><td>WebRTC ICE 候选（UDP/IPv6 绕过不覆盖的 VPN）</td><td>可能暴露</td><td><span class="evi evi-inf">推断</span></td></tr>
+      <tr><td>地区感知年龄验证</td><td>Yoti（<code>_isCountryAwareAgeVerificationEnabled</code>）——按国家触发的身份核验</td><td>是（按账号地区策略触发）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="text-small">要害在<b>一致性校验</b>：任一信号单独存在都可解释，而「出口 IP 在海外 + SIM 是 CN 运营商 + 时区 +0800 + 系统中文 +86 号码 + 海外 Apple ID 收据」的组合在服务端遥测里是一行完整的矛盾记录。客户端不需要"检测 VPN"——服务端把不一致直接算出来了。</p>
+
+  <h4>结论三：封号为什么会"跟设备走"——五层持久身份关联</h4>
+  <div class="flow">
+    <span class="step">① App Attest 硬件密钥</span><span class="arr">→</span>
+    <span class="step">② DeviceCheck 2-bit 服务端标记</span><span class="arr">→</span>
+    <span class="step">③ Sift 钥匙串标识（重装不消失）</span><span class="arr">→</span>
+    <span class="step">④ __Host-ant_trusted_device Cookie</span><span class="arr">→</span>
+    <span class="step">⑤ Anthropic-Device-ID 请求头</span>
+  </div>
+  <ul>
+    <li><b>① App Attest</b>：Secure Enclave 级密钥，登录/会话/内购/积分全流程断言（LoginAttestation、SessionReattest、bind_attestation）。同一台设备换多少账号，断言都出自同一把硬件密钥 <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>② DeviceCheck</b>：苹果为每台设备保留 2 bit 的<b>服务端可写标记</b>，Anthropic 可读写且跟随物理设备（换 Apple ID、卸载重装都跟随）——天然适合做"此设备已被标记"的持久位 <span class="evi evi-seen">【机制实锤】</span> <span class="evi evi-inf">【用作封禁标记为推断】</span></li>
+    <li><b>③ Sift</b>：钥匙串里的设备标识 + 首次 IDFV（<code>com.sift.initial_device_ifv</code>）——iOS 卸载 App <b>不清 Keychain</b>，标识跨安装存活；Sift 平台侧据此做多账号设备图谱关联 <span class="evi evi-seen">【实锤】</span></li>
+    <li><b>④⑤ Cookie 与 Device-ID</b>：可信设备 Cookie 与每次请求的 <code>Anthropic-Device-ID</code> 把账号-设备-会话三元组钉死；App 还原生支持同机多账号（<code>session.activeAccountId</code>），同设备账号天然可关联 <span class="evi evi-seen">【实锤】</span></li>
+  </ul>
+  <p class="text-small">这就是"换号又被封"现象的架构解释：新账号注册那一刻，登录证明（App Attest）+ Sift 设备标识 + DeviceCheck 位就会把这台设备的历史带回来。重新证明机制（SessionReattest 周期性挑战 + RotateReattestCredential 轮换）保证会话中途换环境也会被重新钉住设备身份。</p>
+
+  <h4>风控决策点时间线（服务端消费这些数据的位置）</h4>
+  <div class="flow">
+    <span class="step">注册：手机验证 + 国家码</span><span class="arr">→</span>
+    <span class="step">登录：LoginAttestation + Sift deviceProperties</span><span class="arr">→</span>
+    <span class="step">会话：bootstrap 下发 Geo-Region + Reattest 周期挑战</span><span class="arr">→</span>
+    <span class="step">使用：RUM/遥测流（SIM+时区+locale+行为）</span><span class="arr">→</span>
+    <span class="step">支付：收据 + App Attest 断言</span>
+  </div>
+  <p class="text-small">遥测事件有专用风控分类（<code>siftOnly / fraudMonitoring / fatalEvents / monitoringClient</code>），即部分事件只进反欺诈通道，不进产品分析。</p>
+
+  <h4>诚实的边界（静态逆向看不到的东西）</h4>
+  <ul>
+    <li><b>规则本身不可见</b>：封号阈值、风险评分权重、IP 库、Sift 评分、哪些组合触发人工审核——全部在服务端，二进制里一行都没有</li>
+    <li>本报告<b>无法证明</b>某具体信号（如 SIM 国家码）被用于封号决策——只能证明"被采集、被上报、进了风控通道"这一整条链路存在</li>
+    <li>同为"被封"的账号，具体原因可能各不相同（付款方式、手机号、设备历史、使用模式），不做归因断言</li>
+    <li>更正记录：早期版本提及的 <code>policyCountryCode</code> 经邻域复核属 Google Maps proto 字段；<code>StFraudAbuseInfo/YetiAbuse</code> 属 Google proto 类型群——均非 Anthropic 风控组件，已从结论中剔除</li>
+  </ul>
+</div>
+
+<div id="p-end" role="tabpanel" aria-labelledby="tab-end" hidden>
+  <h3>服务端点清单（剔除苹果/文档类）</h3>
+  <div class="table-responsive">
+  <table class="table table-sm">
+    <thead><tr><th>端点</th><th>用途</th><th>证据</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">https://claude.ai/api</td><td>应用主 API（会话、bootstrap、遥测）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">api/auth/session_reattest/device_key(+ /challenge)、/rotate_reattest</td><td>设备重证明</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">/api/yoti/age-verification/start</td><td>年龄验证</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">/v1/privacy-consents(/check)</td><td>隐私同意状态</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">api3.siftscience.com/v3/accounts/%@/mobile_events</td><td>Sift 风控事件</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">us5.datadoghq.com/rum/sessions</td><td>Datadog RUM</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">o1158394.ingest.us.sentry.io/4507115472551936, /4510189717356544</td><td>Sentry（主 App + 扩展进程共用）</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">play.googleapis.com/log、firebaseinstallations.googleapis.com</td><td>Google 遥测/安装 ID</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">claude-ai.staging.ant.dev/api、api-staging.anthropic.com</td><td>预发环境</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">claude.fedstart.com/m365/v1/mcp、microsoft365.mcp.claude.com</td><td>政企版 FedStart / M365 MCP</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">accounts.google.com/o/oauth2/v2/auth</td><td>Google 登录</td><td><span class="evi evi-seen">实锤</span></td></tr>
+      <tr><td class="mono">claude.findahelpline.com</td><td>心理健康转介资源</td><td><span class="evi evi-seen">实锤</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h3>进程清单</h3>
+  <p class="text-small">主 App + 5 个扩展（ClaudeNotificationService 推送服务、ShareExtension 分享、WidgetExtension 小组件、CCRNotificationContent 通知内容）。NotificationService 与 WidgetExtension 二进制内含 claude.ai 域与 Sentry DSN，与主 App 共享遥测通道；扩展经应用组 <code>group.com.anthropic.claude</code> 与 Keychain 共享组交换会话数据。</p>
+</div>
+
+<div id="p-met" role="tabpanel" aria-labelledby="tab-met" hidden>
+  <h3>分析方法</h3>
+  <ul>
+    <li>解包 IPA → Payload/Claude.app；<code>plutil</code> 解析 Info.plist / entitlements / GoogleService-Info.plist / PrivacyInfo.xcprivacy</li>
+    <li><code>nm -u</code> 导入符号能力图（getifaddrs、CTTelephonyNetworkInfo、DCAppAttestService、SCNetworkReachability 等 10,586 项）</li>
+    <li><code>strings</code> 全量字符串（412,784 条）+ <code>otool -ov</code> ObjC 类方法表交叉定位</li>
+    <li><code>otool -tV</code> 全反汇编 853MB，literal pool 注释追踪请求头构建函数（0x100abac64–0x100abb0b0）与 getifaddrs 调用者归属</li>
+    <li>Ghidra 12.1.4 headless（JDK 21）全量自动分析：<b>688,893 个函数</b>、7190 秒、2.1 GB 程序库；定向导出 41 个安全相关函数的 C 伪代码（字符串引用追踪 + 导入符号调用者追踪 + 指定地址）</li>
+  </ul>
+  <h3>局限性</h3>
+  <ul>
+    <li>静态分析 ≠ 运行时观测：未动态抓包验证字段实际取值</li>
+    <li>App Store 签名二进制无本地符号，函数名为地址名；模块归属依据地址区间、字符串邻域与源码路径断言</li>
+    <li>Ghidra 排障记录：ObjC 元数据分析器因类型编码缺陷崩溃（已禁用，Ghidra 12 中名为 "Objective-C Type Metadata Analyzer"）；Swift 解串器逐符号派生进程过慢（已禁用）；<code>-analysisTimeoutPerFile</code> 单位为秒</li>
+    <li>第 1 处 getifaddrs（0x10459a984）所在库无符号无字符串，归属未定；第 2 处已确定属 Google Maps SDK</li>
+  </ul>
+  <h3>声明</h3>
+  <p class="text-small">本报告为安全研究用途的隐私透明度分析，仅描述软件行为证据，不构成规避平台风控的操作指引。所有【实锤】结论附有二进制内地址或字符串佐证；分析工件保留于分析环境以备复核。</p>
+</div>
+</div>
+
+<script>
+(function () {
+  var tabs = document.querySelectorAll('.nav-link[role="tab"]');
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (x) {
+        x.classList.remove('active');
+        x.setAttribute('aria-selected', 'false');
+        var p = document.getElementById(x.getAttribute('aria-controls'));
+        if (p) p.hidden = true;
+      });
+      t.classList.add('active');
+      t.setAttribute('aria-selected', 'true');
+      var panel = document.getElementById(t.getAttribute('aria-controls'));
+      if (panel) panel.hidden = false;
+    });
+  });
+})();
+</script>
+</body>
+</html>

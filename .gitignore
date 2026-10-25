@@ -1,0 +1,5 @@
+*.ipa
+*.bin
+*.gpr/
+*.rep/
+.DS_Store
